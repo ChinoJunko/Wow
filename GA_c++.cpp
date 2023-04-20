@@ -5,44 +5,71 @@
 #include <ctime>
 #include <cmath>
 #include <vector>
+#include <map>
 #include <list>
 #include <algorithm>
 #include <fstream>
 using namespace std;
 
 ofstream out;
-long long _sum;
-long long _max_sum;
+short int APWakeTime[4][4] = {{0, 0, 0, 0}, {0, 80, 80, 80}, {0, 107, 80, 80}, {0, 160, 133, 107}}; // 从1开始
 
-// 个体模板类，使用浮点数编码(FPR)方式
-template <class T>
+class AP
+{
+public:
+	string Number;	  // 飞机编号
+	string TS;		  // 交通流
+	short int APKind; // 型号
+	int delay;		  // 抵达时延
+	AP() {}
+	AP(string n, short int k, string s, int d) : Number(n), APKind(k), TS(s), delay(d) {}
+	friend ostream &operator<<(ostream &os, const AP &ap)
+	{
+		os << ap.Number << ":" << ap.APKind << ":" << ap.TS << ":" << ap.delay;
+		return os;
+	}
+	friend bool operator==(const AP &A, const AP &B)
+	{
+		return A.Number == B.Number;
+	}
+};
+
 class individual
 {
 public:
-	vector<T> chromosome; // 染色体
-	double fitness;		  // 适应度
-	double val;			  // 函数值
+	vector<AP *> chromosome; // 染色体
+	double fitness;			 // 适应度
+	double val;				 // 函数值
+
 	void print()
 	{
-		typename vector<T>::iterator it = this->chromosome.begin();
+		typename vector<AP *>::iterator it = this->chromosome.begin();
 		cout << "个体有" << chromosome.size() << "个基因：";
 		for (; it != this->chromosome.end(); it++)
-			cout << *it << " ";
+			cout << *(*it) << "|";
 		cout << endl;
 	}
 	void write()
 	{
-		auto it = this->chromosome.begin();
+		typename vector<AP *>::iterator it = this->chromosome.begin();
 		cout << "个体有" << chromosome.size() << "个基因：\n";
 		for (; it != this->chromosome.end(); it++)
-			out << *it << " ";
+			out << **it << " ";
 		out << endl;
 		out << val << endl;
 	}
+
+	bool isAfrontofB() {}
 };
 
+static void mySwap(AP *&A, AP *&B)
+{
+	AP *temp = A;
+	A = B;
+	B = temp;
+}
+
 // GA遗传算法类模板
-template <class T>
 class GAalg
 {
 
@@ -50,13 +77,13 @@ public:
 	// 算法初始化
 	GAalg(int sg, int sc, int mg, double pc, double pm) : sizeof_generation(sg), sizeof_chrom(sc), max_generation(mg), p_crossover(pc), p_mutation(pm)
 	{
+
 		// 文件初始化
 		out.open("data.txt");
 		cout << "Start GA algorithm...\n";
 		generationbox.clear();
 		// 更新代数
 		cur_generation = 0;
-		_sum = 0;
 		// 随机数撒种
 		srand(time(NULL));
 	}
@@ -71,40 +98,54 @@ public:
 		generationbox.clear();
 		system("pause");
 	}
+	// 读取航班数据
+	void ReadAPData()
+	{
+		ifstream in("input.txt");
+		while (!in.eof())
+		{
+			AP ap;
+			in >> ap.Number >> ap.APKind >> ap.TS >> ap.delay;
+			apbox.push_back(ap);
+		}
+		in.close();
+	}
 	// 打印所有个体
 	virtual void print()
 	{
 		cout << "共有" << sizeof_generation << "个个体，每个个体基因如下：\n";
-		typename vector<individual<T>>::iterator it = generationbox.begin();
+		typename vector<individual>::iterator it = generationbox.begin();
 		for (; it != generationbox.end(); it++)
 			(*it).print();
 	}
 	// 初始化种群中的个体
-	virtual void InitIndividual(individual<T> &my)
+	virtual void InitIndividual(individual &my)
 	{
-		do
+		my.chromosome.clear();
+		// 使用洗牌算法
+		for (auto &i : apbox)
 		{
-			my.chromosome.clear();
-			for (int i = 0; i < sizeof_chrom; i++)
-			{
-				cout << "初始化第" << i + 1 << "个基因" << endl;
-				T temp;
-				InitChromosome(temp);
-				my.chromosome.push_back(temp);
-			}
-		} while (!IsOk(my));
+			my.chromosome.push_back(&i);
+		}
+		for (int i = my.chromosome.size() - 1; i > 0; i--)
+		{
+			mySwap(my.chromosome[i], my.chromosome[rand() % i]);
+		}
 		return;
 	}
 	// 种群初始化，初始化基因
 	virtual void GenerateInit()
 	{
+		ReadAPData();
 		for (int i = 0; i < sizeof_generation; i++)
 		{
+
 			cout << "正在初始化第" << i + 1 << "个个体" << endl;
-			individual<T> obj;
+			individual obj;
 			InitIndividual(obj);
 			generationbox.push_back(obj);
 		}
+
 		cur_generation = 0;
 		return;
 	}
@@ -115,9 +156,13 @@ public:
 		cout << endl
 			 << endl
 			 << "正在处理第" << cur_generation << "代...\n";
-		SelectOperator();	 // 选择算子
+		SelectOperator(); // 选择算子
+		// print();
+		// system("pause");
+		cout << "正在交配" << endl;
 		CrossoverOperator(); // 交配算子
-		MutationOperator();	 // 变异算子
+		cout << "正在变异" << endl;
+		MutationOperator(); // 变异算子
 	}
 	// 评价个体
 	virtual void ValuatePopulation()
@@ -132,7 +177,7 @@ public:
 		cur_bestone = *generationbox.begin();
 		cur_worstone = *generationbox.begin();
 		// 遍历所用iterator
-		typename vector<individual<T>>::iterator it = generationbox.begin();
+		typename vector<individual>::iterator it = generationbox.begin();
 		int i = 0;
 		// 寻找当前最佳最差
 		for (it = generationbox.begin(); it != generationbox.end(); it++)
@@ -167,11 +212,12 @@ public:
 	// 交配方法，交换自从位置pos之后的x与y的染色体
 	void cross(int x, int y, int pos, int end)
 	{
+		cout << "交配：" << x << " " << y << " " << pos << " " << end << endl;
 		// 临时变量
-		typename vector<individual<T>>::iterator itx = generationbox.begin();
-		typename vector<individual<T>>::iterator ity = generationbox.begin();
-		individual<T> valx;
-		individual<T> valy;
+		typename vector<individual>::iterator itx = generationbox.begin();
+		typename vector<individual>::iterator ity = generationbox.begin();
+		individual valx;
+		individual valy;
 		// 寻找暂存
 		for (int i = 0; i != x; i++)
 			itx++;
@@ -179,9 +225,10 @@ public:
 			ity++;
 		valx = *itx;
 		valy = *ity;
+		map<AP *, AP *> mapa, mapb;
 		// cout<<"个体"<<x+1<<"和"<<y+1<<"在基因位置"<<pos+1<<"开始交配直到位置"<<end+1<<endl;
 		// 开始交配x
-		typename vector<T>::iterator from, targe;
+		typename vector<AP *>::iterator from, targe;
 		from = valy.chromosome.begin();
 		targe = (*itx).chromosome.begin();
 		for (int i = 0; i != pos; i++)
@@ -191,6 +238,7 @@ public:
 		}
 		for (int p = pos; p <= end; p++)
 		{
+			mapa[*targe] = *from;
 			*targe = *from;
 			from++;
 			targe++;
@@ -205,7 +253,49 @@ public:
 		}
 		for (int p = pos; p <= end; p++)
 		{
+			mapb[*targe] = *from;
 			*targe = *from;
+			from++;
+			targe++;
+		}
+		// 消除重复元素
+		for (auto pair : mapa)
+		{
+			if (mapa.find(pair.second) != mapa.end())
+			{
+				mapa[pair.first] = mapa[pair.second];
+			}
+		}
+		for (auto pair : mapb)
+		{
+			if (mapb.find(pair.second) != mapb.end())
+			{
+				mapb[pair.first] = mapb[pair.second];
+			}
+		}
+		// 中间映射
+		from = (*itx).chromosome.begin();
+		targe = (*ity).chromosome.begin();
+		for (int i = 0; i != pos; i++)
+		{
+			if (mapb.find(*from) != mapb.end())
+				*from = mapb[*from];
+			if (mapa.find(*targe) != mapa.end())
+				*targe = mapa[*targe];
+			from++;
+			targe++;
+		}
+		for (int p = pos; p <= end; p++)
+		{
+			from++;
+			targe++;
+		}
+		for (int e = end + 1; e < valx.chromosome.size(); e++)
+		{
+			if (mapb.find(*from) != mapb.end())
+				*from = mapb[*from];
+			if (mapa.find(*targe) != mapa.end())
+				*targe = mapa[*targe];
 			from++;
 			targe++;
 		}
@@ -236,11 +326,11 @@ public:
 		// 随机概率以及总适应度
 		double p, sum = 0.0;
 		// 新种群temp
-		vector<individual<T>> newgenerationbox;
+		vector<individual> newgenerationbox;
 		// 前缀和适应度
 		double *addfit = new double[sizeof_generation];
 		// 遍历所用iterator
-		typename vector<individual<T>>::iterator it = generationbox.begin();
+		typename vector<individual>::iterator it = generationbox.begin();
 		// 求总适应度
 		for (it = generationbox.begin(); it != generationbox.end(); it++)
 			sum += it->fitness;
@@ -320,26 +410,28 @@ public:
 		int i, j;
 		double p;
 		// 获取每一个个体
-		typename vector<individual<T>>::iterator iti;
+		typename vector<individual>::iterator iti;
 		for (iti = generationbox.begin(); iti != generationbox.end(); iti++)
 		{
 			// 获取个体的每一个基因
-			individual<T> temp = *iti;
-			typename vector<T>::iterator itj = temp.chromosome.begin();
-			for (; itj != temp.chromosome.end(); itj++)
+			individual temp = *iti;
+			i = rand() % temp.chromosome.size(), j = rand() % temp.chromosome.size();
+			if (i > j)
+				swap(i, j);
+			auto itx = temp.chromosome.begin();
+			while (i > 0)
 			{
-				// 判断是否变异
-				p = rand() % 1000 / 1000.0;
-				if (p < p_mutation)
-				{
-					// 开始变异
-					// cout<<"发生变异"<<endl;
-					InitChromosome(*itj);
-					// cout<<"有数据变异为"<<*itj<<endl;
-				}
-				// else
-				// cout<<"不发生变异"<<endl;
+				++itx;
+				--i;
+				--j;
 			}
+			auto ity = itx;
+			while (j > 0)
+			{
+				++ity;
+				--j;
+			}
+			mySwap(*itx, *ity);
 			// 是否保存变异
 			if (IsOk(temp))
 				*iti = temp;
@@ -380,28 +472,60 @@ public:
 		out.close();
 	}
 
-	// 初始化个体中的基因
-	virtual void InitChromosome(T &) = 0;
 	// 计算函数值
-	virtual void CalculateVal(individual<T> &) = 0;
+	virtual void CalculateVal(individual &my)
+	{
+		// 这里只计算了根据机型不同尾流时间得到的总排队时间
+		auto i = my.chromosome.begin();
+		auto j = i;
+		++j;
+		double time = 0;
+		// my.print();
+		// cout<<"time=";
+		while (j != my.chromosome.end())
+		{
+			// cout<<"+"<<APWakeTime[(*i)->APKind][(*j)->APKind];
+			time += APWakeTime[(*i)->APKind][(*j)->APKind];
+			++i;
+			++j;
+		}
+		// cout<<"="<<time<<endl;
+		// system("pause");
+		my.val = time;
+	}
 	// 计算适应度
-	virtual void CalculateFitnessValue() = 0;
+	virtual void CalculateFitnessValue()
+	{
+		double totaltime = apbox.size() * 160;
+		auto it = generationbox.begin();
+		// 求函数值
+		for (it = generationbox.begin(); it != generationbox.end(); it++)
+		{
+			CalculateVal(*it);
+			it->fitness = pow(1 / (it->val / totaltime), 2);
+		}
+	}
 	// 终止条件
-	virtual bool IsEnd() = 0;
+	virtual bool IsEnd()
+	{
+		return cur_generation >= max_generation;
+	}
 	// 是否为有效解
-	virtual bool IsOk(individual<T> cur) { return 1; }
+	virtual bool IsOk(individual cur) { return 1; }
 
 public:
+	// 飞机容器
+	vector<AP> apbox;
 	// 染色体容器
-	vector<individual<T>> generationbox;
+	vector<individual> generationbox;
 	// 最佳个体
-	individual<T> cur_bestone;
+	individual cur_bestone;
 	// 最差个体
-	individual<T> cur_worstone;
+	individual cur_worstone;
 	// 历史最佳个体
-	individual<T> bestone;
+	individual bestone;
 	// 历史最差个体
-	individual<T> worstone;
+	individual worstone;
 
 	// 数据成员
 	int sizeof_generation; // 种群大小
@@ -412,59 +536,6 @@ public:
 	double p_mutation;	   // 变异概率
 	int best_index;		   // 最佳个体位置
 	int worst_index;	   // 最差个体位置
-};
-
-class CalcMaxVal : public GAalg<double>
-{
-public:
-	CalcMaxVal(int sg, int sc, int mg, double pc, double pm) : GAalg(sg, sc, mg, pc, pm)
-	{
-		// innit the class
-	}
-	// 初始化个体中的基因
-	void InitChromosome(double &my)
-	{
-		my = rand() % 20100 / 100.0 - 100;
-		// cout<<"基因初始值为"<<my<<endl;
-	}
-	// 计算适应度
-	void CalculateFitnessValue()
-	{
-		// 遍历所用iterator
-		typename vector<individual<double>>::iterator it = generationbox.begin();
-		// 求函数值
-		for (it = generationbox.begin(); it != generationbox.end(); it++)
-		{
-			CalculateVal(*it);
-			it->fitness = pow(1 / (it->val), 8);
-			_sum++;
-		}
-	}
-	// 计算函数值
-	void CalculateVal(individual<double> &my)
-	{
-		typename vector<double>::iterator it = my.chromosome.begin();
-		double ans = 0;
-		for (; it != my.chromosome.end(); it++)
-		{
-			ans += (*it) * (*it);
-		}
-		my.val = ans;
-		return;
-	}
-	// 终止条件
-	bool IsEnd()
-	{
-		if (cur_generation >= max_generation || _sum > _max_sum)
-			return 1;
-		else
-			return 0;
-	}
-	// 是否为有效解
-	bool IsOk(individual<double> cur)
-	{
-		return 1;
-	}
 };
 
 int main()
@@ -486,8 +557,7 @@ int main()
 	cin>>pm;
 	printf("\t最大评估次数：");
 	cin>>_max_sum;*/
-	_max_sum = 10000000000;
-	CalcMaxVal a(30, 30, 8, 0.60, 0.005); // 种群个数，基因个数，最大代数，交配概率，变异概率
+	GAalg a(30, 4, 8, 0.60, 0.005); // 种群个数，基因个数，最大代数，交配概率，变异概率
 	a.GenerateInit();
 	// a.print();
 	cout << "开始遗传算法：" << endl;
